@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+trapcmd() {
+  rm -f "$tmpfile"
+}
+trap trapcmd exit INT SIGINT
+
+picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-picker
+
+# Temp file to capture the picker output
+tmpfile=$(mktemp)
+
+# TODO: make a dynamic terminal var
+#
+# term=""
+#
+# terms=(
+#   "kitty"
+#   "xterm"
+#   "alacritty"
+#   "foot"
+# )
+#
+# for t in "${terms[@]}"; do
+#   if command-exists "${t}"; then
+#     case "${t}" in
+#     kitty | alacritty) term="kitty --class qute-editor --execute" ;;
+#     foot) term="foot --app-id qute-editor" ;;
+#     xterm) term="xterm -bg black -fg white" ;;
+#     esac
+#   fi
+# done
+# eval "${term} $picker $tmpfile &"
+
+# Spawn kitty in background, save its PID
+kitty --execute "$picker" "$tmpfile" &
+pid=$!
+
+# Wait for kitty (the picker session) to finish
+wait $pid || true
+kill -0 $pid 2>/dev/null && kill -9 $pid
+
+# Read password from tmpfile
+pass=$(<"$tmpfile")
+
+# Send text to qutebrowser
+echo "insert-text $pass" >>"$QUTE_FIFO"

@@ -1,0 +1,327 @@
+#!/usr/bin/env bash
+# usercommand to pick rbw passwords with fzf
+# takes in one argument $1 and this should be the tmpfile to write to
+#
+# gets executed by get-pw && kitty
+MENU_ITEMS=(
+  "-> Entries"
+  "-> Quit"
+)
+
+# ─< initial variables >────────────────────────────────────────────────────────
+cache_dir="${HOME}/.cache/rbwzf"
+cache_file="${cache_dir}/last_entries-${USER-"$(whoami)"}" # cachefile with username in it
+
+# checks for the rbw installation path though cargo and appends it to PATH just
+# to be sure
+if [[ -d "$HOME/.cargo/bin" ]]; then
+  PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+
+# ─< ANSI color codes >───────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# ────────────────────────────────< setup traps >──────────────────────────────
+on-exit() {
+  local err=$?
+
+  # INFO:
+  # You can uncomment the next line, to always lock your vault uppon exiting the
+  # script. Allthough this is more secure, it is also pretty nerve racking, if
+  # you have to type in your password all the time.. But you decide ^^
+  # rbw lock
+
+  [[ -z "${err}" ]] || exit "$err" # exiting with the error message given
+
+  exit "$err"
+}
+trap on-exit exit SIGTERM INT
+# ─────────────────────────────────< traps done >─────────────────────────────────
+
+command-exists() {
+  command -v "$@" >/dev/null 2>&1
+}
+
+write-cache() {
+  if [[ -f "${cache_file}" ]]; then
+    if ((${#LAST[@]} > 0)); then
+      # clearing the cache file content, if LAST is greater than 0
+      # -> otherwise the $cache_file would get double entries, and we don't want that
+      echo "" >"${cache_file}"
+      { printf "%s\n" "${LAST[@]}" | sort; } >"${cache_file}"
+    fi
+  fi
+}
+
+# check dependencies, also checks and unlocks vault if locked
+check-dependencies() {
+  local deps=() needs=()
+
+  deps=(
+    "rbw"
+    "fzf"
+    "jq"
+    "sort"
+    "pinentry"
+  )
+
+  # fill in the needs=() array if packages are missing
+  for pkg in "${deps[@]}"; do
+    if ! command-exists "${pkg}"; then
+      needs+=("${pkg}")
+    fi
+  done
+
+  # if array is not empty, then exit and inform the user
+  if ((${#needs[@]} > 0)); then
+    printf "You do not have ${RED}%s${NC} installed on your system, please install before going on" "${needs[*]}"
+    exit 69
+  fi
+
+  # unlock vault if it's locked
+  if ! rbw unlocked >/dev/null; then
+    rbw unlock >/dev/null
+  fi
+
+  rbw sync >/dev/null
+
+  if [[ ! -e "${cache_file}" ]]; then
+    mkdir -p "${cache_dir}"
+    touch "${cache_file}"
+  fi
+
+  if [[ -f "${cache_file}" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && LAST+=("$line")
+    done <"$cache_file"
+  else
+    LAST=()
+  fi
+}
+
+add-last() {
+  local arg=$1 arr=() entry append=true
+  arr=("${LAST[@]}")
+
+  length=${#arr[@]}
+
+  for ((i = 0; i < length; i++)); do
+    if [[ "${arg}" =~ ${arr[$i]} ]]; then
+      append=false
+      break
+    fi
+  done
+
+  if $append; then
+    LAST+=("$arg")
+  fi
+
+  write-cache
+}
+
+# print * for every char in the given length
+for-pw() {
+  local length=${1:-}
+
+  for ((i = 0; i < length; i++)); do
+    printf "*"
+  done
+}
+
+fzf-cmd() {
+  # defines the fzf-cmd, since fzf on different version has different flags to
+  # enable.. Also tries to use a pretty fzf scheme. Also uses sk if it's there and
+  # the fzf_version could not get determined
+
+  local fzf_version label
+  label=$1
+
+  # Extract version number (strip any commit hash, etc.)
+  fzf_version=$(fzf --version 2>/dev/null | awk '{print $1}')
+
+  # If fzf missing or version detection failed
+  [[ -z "$fzf_version" ]] && {
+    if command-exists sk; then
+      sk --margin 12% --color 16 # sk|skim is a rust filepicker simmilar like fzf
+      return
+    else
+      fzf --margin 12% --color 16 --cycle --no-multi --reverse
+      return
+    fi
+  }
+
+  # Check if fzf_version >= 0.58.0
+  if [[ "$(printf '%s\n' "0.58.0" "$fzf_version" | sort -V | head -n1)" == "0.58.0" ]]; then
+    # sk --margin 10% --color 16 # sk|skim is a rust filepicker simmilar like fzf
+    if ((${#label} == 0)); then
+      fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi
+    else
+      fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi --input-label "${label}"
+    fi
+  else
+    fzf --margin 12% --color 16 --cycle --no-multi --reverse
+  fi
+}
+
+fzf-resolve() {
+  local arg=$1
+
+  [[ -n "${arg}" ]] || exit 68
+
+  case "${arg}" in
+  *[Ee]ntries) fzf-entries ;;
+  *[Mm]enu) fzf-menu ;;
+  *[Ll]ast*)
+    if ((${#LAST[@]} >= 1)); then
+      # if [[ -n "${LAST}" ]]; then
+      least=$(get-opts "${LAST[@]}" "${MENU_ITEMS[@]}")
+      fzf-resolve "${least}"
+      fzf-show "${least}"
+      # fzf-show "${LAST}"
+    else
+      echo "There is no last password in \$LAST.." && sleep 5
+    fi
+    ;;
+  Add) ;;
+  Remove) ;;
+  *[Qq]uit) exit 0 ;;
+  esac
+}
+
+get-opts() {
+  local labels opt arr=()
+  # get options with fzf command directly
+  # just assign variable with the get-opts + any array or just write your own
+  # e.g.
+  # var=$(get-opts "this" "gets" "displayed" "as" "options")
+  # can also take in lables, with the "!_label_:" prefix, everything after :
+  # will get displayed in the input-label box (required fzf 0.58 and higher)
+
+  # if there is a '!_label_:' prefix, then use it!
+  if [[ "${1}" =~ "!_label_:" ]]; then
+    labels=$1
+    shift
+    local arr=("$@")
+    labels=${labels#!_label_:} # remove the prefix we searched for
+
+    {
+      for opt in "${arr[@]}"; do
+        printf "%s\n" "${opt}"
+      done
+    } | fzf-cmd "${labels}"
+  else
+    arr=("$@")
+    {
+      for opt in "${arr[@]}"; do
+        printf "%s\n" "${opt}"
+      done
+    } | fzf-cmd
+  fi
+}
+
+setup-bootstrap() {
+  local domain="" mail="" check_mail="" check_url="" data=""
+  data="$(rbw config show)"
+
+  check_mail=$(jq -r .email <<<"${data}")
+  check_url=$(jq -r .base_url <<<"${data}")
+
+  if [[ -z "${check_mail}" ]] || [[ -z "${check_url}" ]]; then
+    # ─< if mail or url is not set, then ask for it and set it! >───────────────────
+    [[ -n "${check_mail}" ]] || {
+      read -r -p "Type in the mail for your account - mail: " mail
+
+      if [[ "${mail}" =~ ^(.*@.*)$ ]]; then
+        rbw config set email "${mail}"
+      else
+        echo "Your mail $mail was formatted incorrectly.."
+      fi
+    }
+
+    [[ -n "${check_url}" ]] || {
+      read -rp "Type in the domain your bitwarden is hosted - (https:// is automatically appended) - domain: " domain
+      domain=${domain#https://} # sanitize name
+      domain=${domain#http://}  # sanitize name
+      domain=${domain%%/*}      # sanitize name
+
+      rbw config set base_url "https://${domain}"
+    }
+  fi
+
+  # setup the LAST array with the cache input
+  if $cache; then
+    if [[ -f "${cache_file}" ]]; then
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && LAST+=("$line")
+      done <"$cache_file"
+    fi
+  else
+    LAST=()
+  fi
+}
+
+fzf-show() {
+  local data opt entry=$1 entry_name username password arr=() option copy
+
+  data=$(rbw get "${entry}" --raw)
+
+  otp=$(jq -r ".data.totp" <<<"${data}")
+
+  if [[ "${otp}" != "null" ]]; then
+    totp=$(rbw code "${entry}")
+  fi
+
+  entry_name=$(jq -r ".name" <<<"${data}" || no-entry "Name")
+  username=$(jq -r ".data.username" <<<"${data}" || no-entry "Username")
+  password=$(jq -r ".data.password" <<<"${data}" || no-entry "Password")
+
+  [[ -n "${username}" ]] && [[ "${username}" != "null" ]] && arr+=("Username: ${username}")
+  [[ -n "${password}" ]] && [[ "${password}" != "null" ]] && arr+=("Password: $(for-pw ${#password})")
+  [[ -n "${totp}" ]] && arr+=("OTP:      ${totp}")
+  arr+=("${MENU_ITEMS[@]}")
+
+  option=$(get-opts "!_label_:${entry_name} - Select to paste:" "${arr[@]}") # what to paste to qutebrowser input field
+  fzf-resolve "${option}"
+  # option=${option#*: }                                                      # sanitize name
+  case "${option}" in
+  Password:*) copy=${password} ;;
+  Username:*) copy=${username} ;;
+  OTP:*) copy=${totp} ;;
+  *)
+    exit 69
+    ;;
+  esac
+  printf "%s" "${copy}"
+  exit
+}
+
+fzf-entries() {
+  local data entry_name username password copy otp
+  no-entry() {
+    local arg=$1
+    printf "%s\n" "There is no entry for ${arg}"
+  }
+
+  ((${#LAST[@]} > 0)) && MENU_ITEMS[2]="-> Last (${#LAST[@]})"
+
+  local entry
+  entry=$(
+    {
+      printf "%s\n" "${MENU_ITEMS[@]}"
+      rbw ls
+    } | fzf-cmd "Select entry:"
+  )
+
+  # resolve fzf menu options
+  fzf-resolve "${entry}"
+  add-last "${entry}"
+  fzf-show "${entry}"
+}
+
+# check dependencies
+check-dependencies
+bootstrap
+
+input=$(fzf-entries)
+echo "${input}" >$1
