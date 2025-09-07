@@ -57,28 +57,27 @@ check-deps() {
 get-diffs() {
   local lfile1 lfile2 file1 file2
 
+  local diff="diff -U 0 --color"
+
   lfile1=./qute-rbw
   lfile2=./qute-rbw-picker
 
   file1="$DIR/qute-rbw"
   file2="$DIR/qute-rbw-picker"
 
-  # return if no files are there in the first place
-  [[ -f "${file1}" && -f "${file2}" ]] || return
-
   # if $look_for_diff; then
-  diff1=$(diff "$file1" "$lfile1") # diff qute-rbw
-  diff2=$(diff "$file2" "$lfile2") # diff qute-rbw-picker
+  [[ -f "${file1}" && -f "${lfile2}" ]] && diff1=$($diff "$file1" "$lfile1") # diff qute-rbw
+  [[ -f "${file2}" && -f "${lfile2}" ]] && diff2=$($diff "$file2" "$lfile2") # diff qute-rbw-picker
   # fi
 
   ((${#diff1} <= 0)) || {
-    echo "${fiel1#"${DIR}/"} got updated:"
-    echo "${diff1}"
+    echo "${file1#"${DIR}/"} got updated:"
+    printf "%s\n" "${diff1}"
   }
 
   ((${#diff2} <= 0)) || {
     echo "${file2#"${DIR}/"} got updated:"
-    echo "${diff2}"
+    printf "%s\n" "${diff2}"
   }
 }
 
