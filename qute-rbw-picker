@@ -19,14 +19,6 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
   PATH="${HOME}/.cargo/bin:${PATH}"
 fi
 
-if [[ -f "${cache_file}" ]]; then
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && LAST+=("$line")
-  done <"$cache_file"
-else
-  LAST=()
-fi
-
 # ─< ANSI color codes >───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 NC='\033[0m' # No Color
@@ -39,9 +31,9 @@ on-exit() {
   # You can uncomment the next line, to always lock your vault uppon exiting the
   # script. Allthough this is more secure, it is also pretty nerve racking, if
   # you have to type in your password all the time.. But you decide ^^
+
   # rbw lock
 
-  write-cache
   [[ -z "${err}" ]] || exit "$err" # exiting with the error message given
 }
 trap on-exit exit SIGTERM INT
@@ -52,19 +44,9 @@ command-exists() {
 }
 
 write-cache() {
-  if [[ -f "${cache_file}" ]]; then
-    if ((${#LAST[@]} > 0)); then
-      arr=("${LAST[@]}")
-      printf "" >"${cache_file}"
-      { printf "%s\n" "${arr[@]}" | sort; } >"$cache_file"
-
-      # for entry in "${LAST[@]}"; do
-      #   if ! grep -qi "${entry}" ${cache_file}; then
-      #     printf "%s" "$entry" >>"$cache_file"
-      #   fi
-      # done
-    fi
-  fi
+  ((${#LAST[@]} > 0)) && {
+    printf "%s\n" "${LAST[@]}" | sort -u >"$cache_file"
+  }
 }
 
 # check dependencies, also checks and unlocks vault if locked
@@ -119,7 +101,7 @@ add-last() {
   length=${#arr[@]}
 
   for ((i = 0; i < length; i++)); do
-    if [[ "${arg}" =~ ${arr[$i]} ]]; then
+    if [[ "${arg}" == "${arr[$i]}" ]]; then
       append=false
       break
     fi
@@ -128,6 +110,8 @@ add-last() {
   if $append; then
     LAST+=("$arg")
   fi
+
+  write-cache
 }
 
 # print * for every char in the given length
@@ -203,7 +187,7 @@ fzf-resolve() {
     ;;
   Add) ;;
   Remove) ;;
-  *Quit) write-cache && exit 0 ;;
+  *Quit) exit 0 ;;
   esac
 }
 
@@ -347,4 +331,3 @@ setup-bootstrap
 
 input=$(fzf-entries)
 echo "${input}" >$1
-write-cache
