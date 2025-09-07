@@ -66,19 +66,22 @@ get-diffs() {
   file2="$DIR/qute-rbw-picker"
 
   # if $look_for_diff; then
-  [[ -f "${file1}" && -f "${lfile2}" ]] && diff1=$($diff "$file1" "$lfile1") # diff qute-rbw
-  [[ -f "${file2}" && -f "${lfile2}" ]] && diff2=$($diff "$file2" "$lfile2") # diff qute-rbw-picker
+  [[ -f "${file1}" && -f "${lfile2}" ]] && {
+    diff1=$($diff "$file1" "$lfile1") # diff qute-rbw
+    ((${#diff1} <= 0)) || {
+      echo "${file1#"${DIR}/"} got updated:"
+      $diff "$file1" "$lfile1"
+    }
+  }
+
+  [[ -f "${file2}" && -f "${lfile2}" ]] && {
+    diff2=$($diff "$file2" "$lfile2") # diff qute-rbw-picker
+    ((${#diff2} <= 0)) || {
+      echo "${file2#"${DIR}/"} got updated:"
+      $diff "$file2" "$lfile2"
+    }
+  }
   # fi
-
-  ((${#diff1} <= 0)) || {
-    echo "${file1#"${DIR}/"} got updated:"
-    printf "%s\n" "${diff1}"
-  }
-
-  ((${#diff2} <= 0)) || {
-    echo "${file2#"${DIR}/"} got updated:"
-    printf "%s\n" "${diff2}"
-  }
 }
 
 # check userscript dir and make sure the user executed the script in the right
