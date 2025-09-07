@@ -6,6 +6,7 @@
 MENU_ITEMS=(
   "-> Entries"
   "-> Quit"
+  # the third entry (index 2) will be the '--> LAST' entry
 )
 
 # ─< initial variables >────────────────────────────────────────────────────────
@@ -16,6 +17,14 @@ cache_file="${cache_dir}/last_entries-${USER-"$(whoami)"}" # cachefile with user
 # to be sure
 if [[ -d "$HOME/.cargo/bin" ]]; then
   PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+
+if [[ -f "${cache_file}" ]]; then
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && LAST+=("$line")
+  done <"$cache_file"
+else
+  LAST=()
 fi
 
 # ─< ANSI color codes >───────────────────────────────────────────────────────────────────
@@ -32,9 +41,8 @@ on-exit() {
   # you have to type in your password all the time.. But you decide ^^
   # rbw lock
 
+  write-cache
   [[ -z "${err}" ]] || exit "$err" # exiting with the error message given
-
-  exit "$err"
 }
 trap on-exit exit SIGTERM INT
 # ─────────────────────────────────< traps done >─────────────────────────────────
@@ -46,10 +54,15 @@ command-exists() {
 write-cache() {
   if [[ -f "${cache_file}" ]]; then
     if ((${#LAST[@]} > 0)); then
-      # clearing the cache file content, if LAST is greater than 0
-      # -> otherwise the $cache_file would get double entries, and we don't want that
-      echo "" >"${cache_file}"
-      { printf "%s\n" "${LAST[@]}" | sort; } >"${cache_file}"
+      arr=("${LAST[@]}")
+      printf "" >"${cache_file}"
+      { printf "%s\n" "${arr[@]}" | sort; } >"$cache_file"
+
+      # for entry in "${LAST[@]}"; do
+      #   if ! grep -qi "${entry}" ${cache_file}; then
+      #     printf "%s" "$entry" >>"$cache_file"
+      #   fi
+      # done
     fi
   fi
 }
@@ -97,14 +110,6 @@ check-dependencies() {
     mkdir -p "${cache_dir}"
     touch "${cache_file}"
   fi
-
-  if [[ -f "${cache_file}" ]]; then
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && LAST+=("$line")
-    done <"$cache_file"
-  else
-    LAST=()
-  fi
 }
 
 add-last() {
@@ -123,8 +128,6 @@ add-last() {
   if $append; then
     LAST+=("$arg")
   fi
-
-  write-cache
 }
 
 # print * for every char in the given length
@@ -200,7 +203,7 @@ fzf-resolve() {
     ;;
   Add) ;;
   Remove) ;;
-  *[Qq]uit) exit 0 ;;
+  *Quit) write-cache && exit 0 ;;
   esac
 }
 
@@ -265,31 +268,32 @@ setup-bootstrap() {
   fi
 
   # setup the LAST array with the cache input
-  if $cache; then
-    if [[ -f "${cache_file}" ]]; then
-      while IFS= read -r line; do
-        [[ -n "$line" ]] && LAST+=("$line")
-      done <"$cache_file"
-    fi
+  if [[ -f "${cache_file}" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && LAST+=("$line")
+    done <"$cache_file"
   else
     LAST=()
   fi
 }
 
 fzf-show() {
-  local data opt entry=$1 entry_name username password arr=() option output
+  local entry=$1
+  local arr=() data opt entry_name username password option output name folder
 
-  data=$(rbw get "${entry}" --raw)
+  data="$(rbw get "${entry}" --raw)"
 
-  otp=$(jq -r ".data.totp" <<<"${data}")
+  name=$(jq -r .name <<<"${data}")
+  folder=$(jq -r .folder <<<"${data}")
+  username=$(jq -r .data.username <<<"${data}")
+  password=$(jq -r .data.password <<<"${data}")
+  otp=$(jq -r .data.totp <<<"${data}")
 
   if [[ "${otp}" != "null" ]]; then
     totp=$(rbw code "${entry}")
   fi
 
-  entry_name=$(jq -r ".name" <<<"${data}" || no-entry "Name")
-  username=$(jq -r ".data.username" <<<"${data}" || no-entry "Username")
-  password=$(jq -r ".data.password" <<<"${data}" || no-entry "Password")
+  entry_name="${name} ( ${folder})"
 
   [[ -n "${username}" ]] && [[ "${username}" != "null" ]] && arr+=("Username: ${username}")
   [[ -n "${password}" ]] && [[ "${password}" != "null" ]] && arr+=("Password: $(for-pw ${#password})")
@@ -301,6 +305,7 @@ fzf-show() {
   case "${option}" in
   Password:*)
     output=${password}
+    [[ -n "${totp}" ]] && totp=$(rbw code "${entry}") # refresh the code, in case it already changed
 
     # auto copy totp when password was selected
     if [[ -n "${totp}" ]]; then
@@ -319,17 +324,13 @@ fzf-show() {
 
 fzf-entries() {
   local data entry_name username password otp
-  no-entry() {
-    local arg=$1
-    printf "%s\n" "There is no entry for ${arg}"
-  }
 
   ((${#LAST[@]} > 0)) && MENU_ITEMS[2]="-> Last (${#LAST[@]})"
 
   local entry
   entry=$(
     {
-      printf "%s\n" "${MENU_ITEMS[@]}"
+      printf "%s\n" "${MENU_ITEMS[@]:1:2}" # only show quit and last entries, if available
       rbw ls
     } | fzf-cmd "Select entry:"
   )
@@ -342,7 +343,8 @@ fzf-entries() {
 
 # check dependencies
 check-dependencies
-bootstrap
+setup-bootstrap
 
 input=$(fzf-entries)
 echo "${input}" >$1
+write-cache

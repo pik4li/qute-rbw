@@ -8,6 +8,8 @@ A simple qutebrowser userscript that integrates [rbw](https://github.com/doy/rbw
 - Seamless integration with qutebrowser's insert mode
 - Caches recently used entries for quick access
 - Supports TOTP codes if available
+    - Copies totp automatically on password insertion. So you can insert
+    password, and paste your clipboard to instantly login.
 
 ## Prerequisites
 
