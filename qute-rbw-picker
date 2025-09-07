@@ -58,18 +58,25 @@ write-cache() {
 check-dependencies() {
   local deps=() needs=()
 
+  if [[ -n "${WAYLAND_DISPLAY}" ]]; then
+    clipboard=wl-copy
+  else
+    clipboard=xclip
+  fi
+
   deps=(
     "rbw"
     "fzf"
     "jq"
     "sort"
     "pinentry"
+    "$clipboard"
   )
 
   # fill in the needs=() array if packages are missing
   for pkg in "${deps[@]}"; do
     if ! command-exists "${pkg}"; then
-      needs+=("${pkg}")
+      needs+=("${pkg/wl-copy/wl-clipboard}")
     fi
   done
 
@@ -161,6 +168,14 @@ fzf-cmd() {
     fi
   else
     fzf --margin 12% --color 16 --cycle --no-multi --reverse
+  fi
+}
+
+copy-cmd() {
+  if [[ -n "${WAYLAND_DISPLAY}" ]]; then
+    wl-copy
+  else
+    xclip
   fi
 }
 
@@ -262,7 +277,7 @@ setup-bootstrap() {
 }
 
 fzf-show() {
-  local data opt entry=$1 entry_name username password arr=() option copy
+  local data opt entry=$1 entry_name username password arr=() option output
 
   data=$(rbw get "${entry}" --raw)
 
@@ -283,21 +298,27 @@ fzf-show() {
 
   option=$(get-opts "!_label_:${entry_name} - Select to paste:" "${arr[@]}") # what to paste to qutebrowser input field
   fzf-resolve "${option}"
-  # option=${option#*: }                                                      # sanitize name
   case "${option}" in
-  Password:*) copy=${password} ;;
-  Username:*) copy=${username} ;;
-  OTP:*) copy=${totp} ;;
+  Password:*)
+    output=${password}
+
+    # auto copy totp when password was selected
+    if [[ -n "${totp}" ]]; then
+      { printf "%s" "${totp}" | copy-cmd; } >/dev/null
+    fi
+    ;;
+  Username:*) output=${username} ;;
+  OTP:*) output=${totp} ;;
   *)
     exit 69
     ;;
   esac
-  printf "%s" "${copy}"
+  printf "%s" "${output}"
   exit
 }
 
 fzf-entries() {
-  local data entry_name username password copy otp
+  local data entry_name username password otp
   no-entry() {
     local arg=$1
     printf "%s\n" "There is no entry for ${arg}"
