@@ -81,7 +81,6 @@ get-diffs() {
       $diff "$file2" "$lfile2"
     }
   }
-  # fi
 }
 
 # check userscript dir and make sure the user executed the script in the right
