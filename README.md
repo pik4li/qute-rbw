@@ -17,6 +17,7 @@ A simple qutebrowser userscript that integrates [rbw](https://github.com/doy/rbw
 - [rbw](https://github.com/doy/rbw) (Bitwarden CLI)
 - [fzf](https://github.com/junegun/fzf)
 - [kitty](https://sw.kovidgoyal.net/kitty/) (terminal emulator)
+- [jq](https://github.com/jqlang/jq)
 - make (just for the installation, you could call the script with bash if you
 want to. Make just `makes` it easier :D)
 
