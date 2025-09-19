@@ -1,8 +1,22 @@
 #!/usr/bin/env bash
-trapcmd() {
-  rm -f "$tmpfile"
+# trapcmd() {
+#   rm -f "$tmpfile"
+# }
+# trap trapcmd exit INT SIGINT
+
+copy-cmd() {
+  if [[ -n "${WAYLAND_DISPLAY}" ]]; then
+    wl-copy
+  else
+    xclip
+  fi
 }
-trap trapcmd exit INT SIGINT
+
+## debug
+# export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
+# export DISPLAY="${DISPLAY:-}"
+# export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+# echo "PID: $$" >>/tmp/qute-rbw-debug.log
 
 picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-picker
 
@@ -39,8 +53,18 @@ pid=$!
 wait $pid || true
 kill -0 $pid 2>/dev/null && kill -9 $pid
 
-# Read password from tmpfile
-pass=$(<"$tmpfile")
+# Read password and TOTP from tmpfile
+mapfile -t lines <"$tmpfile"
+pass="${lines[0]}"
+totp="${lines[1]}"
 
 # Send text to qutebrowser
 echo "insert-text $pass" >>"$QUTE_FIFO"
+
+# Copy TOTP if present
+if [[ -n "${totp}" ]]; then
+  echo "${totp}" | copy-cmd &
+  disown
+fi
+
+rm -f "$tmpfile"

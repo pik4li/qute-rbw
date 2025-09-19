@@ -14,8 +14,8 @@ cache_dir="${HOME}/.cache/rbwzf"
 cache_file="${cache_dir}/last_entries-${USER-"$(whoami)"}" # cachefile with username in it
 
 # checks for the rbw installation path though cargo and appends it to PATH just
-# to be sure
 if [[ -d "$HOME/.cargo/bin" ]]; then
+  # to be sure
   PATH="${HOME}/.cargo/bin:${PATH}"
 fi
 
@@ -23,7 +23,7 @@ fi
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# ────────────────────────────────< setup traps >──────────────────────────────
+# ──────────────────────────────── <setup traps >──────────────────────────────
 on-exit() {
   local err=$?
 
@@ -37,7 +37,7 @@ on-exit() {
   [[ -z "${err}" ]] || exit "$err" # exiting with the error message given
 }
 trap on-exit exit SIGTERM INT
-# ─────────────────────────────────< traps done >─────────────────────────────────
+# ───────────────────────────────── <traps done >─────────────────────────────────
 
 command-exists() {
   command -v "$@" >/dev/null 2>&1
@@ -51,6 +51,7 @@ write-cache() {
 
 # check dependencies, also checks and unlocks vault if locked
 check-dependencies() {
+  local clipboard
   local deps=() needs=()
 
   if [[ -n "${WAYLAND_DISPLAY}" ]]; then
@@ -95,11 +96,17 @@ check-dependencies() {
 }
 
 add-last() {
-  local arg=$1 arr=() entry append=true
+  local arg=$1 arr=() append=true
+
+  # Skip menu items (anything starting with "->")
+  if [[ "${arg}" == "->"* ]]; then
+    return
+  fi
+
   arr=("${LAST[@]}")
+  local length="${#arr[@]}"
 
-  length=${#arr[@]}
-
+  # Check for exact match in LAST array
   for ((i = 0; i < length; i++)); do
     if [[ "${arg}" == "${arr[$i]}" ]]; then
       append=false
@@ -109,9 +116,8 @@ add-last() {
 
   if $append; then
     LAST+=("$arg")
+    write-cache
   fi
-
-  write-cache
 }
 
 # print * for every char in the given length
@@ -155,14 +161,6 @@ fzf-cmd() {
     fi
   else
     fzf --margin 12% --color 16 --cycle --no-multi --reverse
-  fi
-}
-
-copy-cmd() {
-  if [[ -n "${WAYLAND_DISPLAY}" ]]; then
-    wl-copy
-  else
-    xclip
   fi
 }
 
@@ -261,8 +259,9 @@ setup-bootstrap() {
   fi
 }
 
-fzf-show() {
+fzf-paste() {
   local entry=$1
+  local file=$2
   local arr=() data opt entry_name username password option output name folder
 
   data="$(rbw get "${entry}" --raw)"
@@ -277,7 +276,11 @@ fzf-show() {
     totp=$(rbw code "${entry}")
   fi
 
-  entry_name="${name} ( ${folder})"
+  if [[ -n "${folder}" ]]; then
+    entry_name="${name} ( ${folder})"
+  else
+    entry_name="${name}"
+  fi
 
   [[ -n "${username}" ]] && [[ "${username}" != "null" ]] && arr+=("Username: ${username}")
   [[ -n "${password}" ]] && [[ "${password}" != "null" ]] && arr+=("Password: $(for-pw ${#password})")
@@ -286,15 +289,10 @@ fzf-show() {
 
   option=$(get-opts "!_label_:${entry_name} - Select to paste:" "${arr[@]}") # what to paste to qutebrowser input field
   fzf-resolve "${option}"
+
   case "${option}" in
   Password:*)
     output=${password}
-    [[ -n "${totp}" ]] && totp=$(rbw code "${entry}") # refresh the code, in case it already changed
-
-    # auto copy totp when password was selected
-    if [[ -n "${totp}" ]]; then
-      { printf "%s" "${totp}" | copy-cmd; } >/dev/null
-    fi
     ;;
   Username:*) output=${username} ;;
   OTP:*) output=${totp} ;;
@@ -302,12 +300,20 @@ fzf-show() {
     exit 69
     ;;
   esac
-  printf "%s" "${output}"
-  exit
+
+  # get the output into the file for qutebrowser
+  # Write password/TOTP on separate lines if TOTP exists
+  if [[ -n "${totp}" ]]; then
+    printf "%s\n%s" "${output}" "${totp}" >"$file"
+  else
+    printf "%s" "${output}" >"$file"
+  fi
+  # exit
 }
 
 fzf-entries() {
   local data entry_name username password otp
+  local file=$1
 
   ((${#LAST[@]} > 0)) && MENU_ITEMS[2]="-> Last (${#LAST[@]})"
 
@@ -322,12 +328,18 @@ fzf-entries() {
   # resolve fzf menu options
   fzf-resolve "${entry}"
   add-last "${entry}"
-  fzf-show "${entry}"
+  fzf-paste "${entry}" "${file}"
 }
 
 # check dependencies
 check-dependencies
 setup-bootstrap
 
-input=$(fzf-entries)
-echo "${input}" >$1
+## debug
+# echo "" >/tmp/qute-rbw-debug.log
+# echo "WAYLAND_DISPLAY: $WAYLAND_DISPLAY" >>/tmp/qute-rbw-debug.log
+# echo "DISPLAY: $DISPLAY" >>/tmp/qute-rbw-debug.log
+# echo "PID: $$" >>/tmp/qute-rbw-debug.log
+
+# passes $1 (the tmpfile) into the next functioncall (fzf-paste) where it gets pasted into the tmpfile
+fzf-entries "$1"
