@@ -81,7 +81,7 @@ check-dependencies() {
 
   # if array is not empty, then exit and inform the user
   if ((${#needs[@]} > 0)); then
-    printf "You do not have ${RED}%s${NC} installed on your system, please install before going on" "${needs[*]}"
+    printf "You do not have ${RED}%s${NC} installed on your system, please install before going on" "${needs[*]@Q}"
     exit 69
   fi
 
