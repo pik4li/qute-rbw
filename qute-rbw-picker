@@ -62,7 +62,6 @@ check-dependencies() {
 
   deps=(
     "rbw"
-    "fzf"
     "jq"
     "sort"
     "pinentry"
@@ -75,6 +74,10 @@ check-dependencies() {
       needs+=("${pkg/wl-copy/wl-clipboard}")
     fi
   done
+
+  if ! command-exists sk && ! command-exists fzf && ! command-exists gum; then
+    needs+=("sk || fzf || gum")
+  fi
 
   # if array is not empty, then exit and inform the user
   if ((${#needs[@]} > 0)); then
@@ -133,35 +136,53 @@ fzf-cmd() {
   # defines the fzf-cmd, since fzf on different version has different flags to
   # enable.. Also tries to use a pretty fzf scheme. Also uses sk if it's there and
   # the fzf_version could not get determined
+  local fuzz="" cmd
+
+  local fuzzer=(
+    sk
+    fzf
+    gum
+  )
+
+  for cmd in "${fuzzer[@]}"; do
+    if ! command-exists "$cmd"; then
+      continue
+    fi
+
+    fuzz=$cmd
+    break
+  done
 
   local fzf_version label
   label=$1
 
-  # Extract version number (strip any commit hash, etc.)
-  fzf_version=$(fzf --version 2>/dev/null | awk '{print $1}')
+  case "${fuzz}" in
+  fzf)
+    # Extract version number (strip any commit hash, etc.)
+    fzf_version=$(fzf --version 2>/dev/null | awk '{print $1}')
 
-  # If fzf missing or version detection failed
-  [[ -z "$fzf_version" ]] && {
-    if command-exists sk; then
-      sk --margin 12% --color 16 # sk|skim is a rust filepicker simmilar like fzf
-      return
+    # Check if fzf_version >= 0.58.0
+    if [[ "$(printf '%s\n' "0.58.0" "$fzf_version" | sort -V | head -n1)" == "0.58.0" ]]; then
+      if ((${#label} == 0)); then
+        fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi
+      else
+        fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi --input-label "${label}"
+      fi
     else
       fzf --margin 12% --color 16 --cycle --no-multi --reverse
-      return
     fi
-  }
 
-  # Check if fzf_version >= 0.58.0
-  if [[ "$(printf '%s\n' "0.58.0" "$fzf_version" | sort -V | head -n1)" == "0.58.0" ]]; then
-    # sk --margin 10% --color 16 # sk|skim is a rust filepicker simmilar like fzf
-    if ((${#label} == 0)); then
-      fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi
-    else
-      fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi --input-label "${label}"
-    fi
-  else
-    fzf --margin 12% --color 16 --cycle --no-multi --reverse
-  fi
+    return
+    ;;
+  sk)
+    sk --margin 12% --color 16 --reverse # sk|skim is a rust filepicker simmilar like fzf
+
+    return
+    ;;
+  gum)
+    gum filter --fuzzy --fuzzy-sort --placeholder="Select a password entry.."
+    ;;
+  esac
 }
 
 fzf-resolve() {
