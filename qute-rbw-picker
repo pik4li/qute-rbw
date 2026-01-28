@@ -153,8 +153,10 @@ fzf-cmd() {
     break
   done
 
-  local fzf_version label
+  local fzf_version label extra_opts
   label=$1
+  shift
+  extra_opts=("$@")
 
   case "${fuzz}" in
   fzf)
@@ -164,18 +166,18 @@ fzf-cmd() {
     # Check if fzf_version >= 0.58.0
     if [[ "$(printf '%s\n' "0.58.0" "$fzf_version" | sort -V | head -n1)" == "0.58.0" ]]; then
       if ((${#label} == 0)); then
-        fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi
+        fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi "${extra_opts[@]}"
       else
-        fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi --input-label "${label}"
+        fzf --reverse --style=full:rounded --margin 12% --color 16 --cycle --no-multi --input-label "${label}" "${extra_opts[@]}"
       fi
     else
-      fzf --margin 12% --color 16 --cycle --no-multi --reverse
+      fzf --margin 12% --color 16 --cycle --no-multi --reverse "${extra_opts[@]}"
     fi
 
     return
     ;;
   sk)
-    sk --margin 12% --color 16 --reverse # sk|skim is a rust filepicker simmilar like fzf
+    sk --margin 12% --color 16 --reverse "${extra_opts[@]}" # sk|skim is a rust filepicker simmilar like fzf
 
     return
     ;;
@@ -283,9 +285,18 @@ setup-bootstrap() {
 fzf-paste() {
   local entry=$1
   local file=$2
-  local arr=() data opt entry_name username password option output name folder
+  local arr=() data opt entry_name username password option output name folder uuid
 
-  data="$(rbw get "${entry}" --raw)"
+  # Extract UUID from "name\tuuid" format (tab-separated)
+  # If the entry contains a tab, it came from rbw ls with UUID
+  if [[ "${entry}" == *$'\t'* ]]; then
+    uuid="${entry##*$'\t'}"
+  else
+    # Fallback to using entry as-is (for menu items or backward compatibility)
+    uuid="${entry}"
+  fi
+
+  data="$(rbw get "${uuid}" --raw)"
 
   name=$(jq -r .name <<<"${data}")
   folder=$(jq -r .folder <<<"${data}")
@@ -294,7 +305,7 @@ fzf-paste() {
   otp=$(jq -r .data.totp <<<"${data}")
 
   if [[ "${otp}" != "null" ]]; then
-    totp=$(rbw code "${entry}")
+    totp=$(rbw code "${uuid}")
   fi
 
   if [[ -n "${folder}" ]]; then
@@ -342,8 +353,10 @@ fzf-entries() {
   entry=$(
     {
       printf "%s\n" "${MENU_ITEMS[@]:1:2}" # only show quit and last entries, if available
-      rbw ls
-    } | fzf-cmd "Select entry:"
+      # Use UUID-based selection: format as "name\tuuid" (tab-separated)
+      # fzf will display only the name but return the full line with UUID
+      rbw ls --fields id,name | awk -F'\t' '{print $2 "\t" $1}'
+    } | fzf-cmd "Select entry:" --delimiter=$'\t' --with-nth=1
   )
 
   # resolve fzf menu options
