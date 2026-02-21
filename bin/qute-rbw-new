@@ -47,17 +47,20 @@ ANSI=(
   ["white"]=$'\e[38;2;235;219;178m'  # #EBDBB2 (foreground/light)
 )                                    # the gruvbox colors
 
-# if ! command-exists fzf || ! command-exists sk; then
-#   echo "${ANSI[yellow]}We are missing some core components! (${ANSI[red]}fzf|sk${ANSI[yellow]})${ANSI[nc]}"
-#   read -n1
-#   return 1
-# fi
+check-deps() {
+  local missing=()
+  command-exists rbw || missing+=("rbw")
+  command-exists jq || missing+=("jq")
+  if ! command-exists fzf; then
+    if ! command-exists sk; then
+      missing+=("fzf|sk")
+    fi
+  fi
 
-if ! command-exists jq; then
-  echo "${ANSI[yellow]}We are missing some core components! (${ANSI[red]}jq${ANSI[yellow]})${ANSI[nc]}"
-  read -n1
-  return 1
-fi
+  ((${#missing[@]} == 0)) || {
+    err "${ANSI[yellow]}Missing some core components: ${ANSI[red]}${missing[*]@Q}${ANSI[nc]}"
+  }
+}
 
 [[ -n "$FZF_TOOL" ]] || {
   if command-exists fzf; then
@@ -91,14 +94,6 @@ fzf-cmd() {
     return
     ;;
   esac
-
-  # if command-exists fzf; then
-  #   cmd=fzf
-  #   args=("--reverse" "--style=full:rounded" "--margin=12%" "--color=16" "--cycle" "--no-multi" "--header=$header")
-  # elif command-exists sk; then
-  #   cmd=sk
-  #   args=("--margin=12%" "--color=16" "--reverse" "--header=$header")
-  # fi
 
   $cmd "${args[@]}"
   return
