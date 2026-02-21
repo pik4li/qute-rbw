@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# trapcmd() {
-#   rm -f "$tmpfile"
-# }
-# trap trapcmd exit INT SIGINT
+# Temp file to capture the picker output
+tmpfile=$(mktemp)
+
+trapcmd() {
+  rm -f "$tmpfile"
+}
+trap trapcmd exit INT SIGINT
 
 copy-cmd() {
   if [[ -n "${WAYLAND_DISPLAY}" ]]; then
@@ -12,41 +15,27 @@ copy-cmd() {
   fi
 }
 
+command-exists() {
+  command -v "$@" >/dev/null 2>&1
+}
+
 ## debug
 # export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
 # export DISPLAY="${DISPLAY:-}"
 # export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 # echo "PID: $$" >>/tmp/qute-rbw-debug.log
 
-picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-picker
-
-# Temp file to capture the picker output
-tmpfile=$(mktemp)
+# picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-picker
+picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-new
 
 # TODO: make a dynamic terminal var
-#
-# term=""
-#
-# terms=(
-#   "kitty"
-#   "xterm"
-#   "alacritty"
-#   "foot"
-# )
-#
-# for t in "${terms[@]}"; do
-#   if command-exists "${t}"; then
-#     case "${t}" in
-#     kitty | alacritty) term="kitty --class qute-editor --execute" ;;
-#     foot) term="foot --app-id qute-editor" ;;
-#     xterm) term="xterm -bg black -fg white" ;;
-#     esac
-#   fi
-# done
-# eval "${term} $picker $tmpfile &"
+# # Fix right now is the awesome `wm-term` application, written by myself :)
 
-# Spawn kitty in background, save its PID
-kitty --execute "$picker" "$tmpfile" &
+if command-exists wm-term; then
+  wm-term "$picker" "$tmpfile" &
+else
+  kitty --execute "$picker" "$tmpfile" &
+fi
 pid=$!
 
 # Wait for kitty (the picker session) to finish
@@ -68,3 +57,5 @@ if [[ -n "${totp}" ]]; then
 fi
 
 rm -f "$tmpfile"
+
+#some change

@@ -1,13 +1,41 @@
 #!/usr/bin/env bash
 # usercommand to pick rbw passwords with fzf
 # takes in one argument $1 and this should be the tmpfile to write to
-#
+
+declare -A ANSI # for echo and stuff (ansi sequences)
+ANSI=(
+  ["bold"]=$'\e[1m'
+  ["bolt"]=$'\e[1m'
+  ["italic"]=$'\e[3m'
+  ["blink"]=$'\e[5m'
+  ["underline"]=$'\e[4m'
+  ["undercurl"]=$'\e[4m'
+  ["strike"]=$'\e[9m'
+  ["invert"]=$'\e[7m'
+  ["nc"]=$'\e[0m'
+  ["reset"]=$'\e[0m'
+  ["black"]=$'\e[30m'
+  ["red"]=$'\e[31m'
+  ["green"]=$'\e[32m'
+  ["yellow"]=$'\e[33m'
+  ["blue"]=$'\e[34m'
+  ["magenta"]=$'\e[35m'
+  ["cyan"]=$'\e[36m'
+  ["white"]=$'\e[37m'
+)
+
 # gets executed by get-pw && kitty
 MENU_ITEMS=(
   "-> Entries"
   "-> Quit"
   # the third entry (index 2) will be the '--> LAST' entry
 )
+
+err() {
+  echo "$*"
+  read -r -p "Press any key to ${ANSI[blue]}continue${ANSI[nc]}.." -N1
+  exit 1
+}
 
 # ─< initial variables >────────────────────────────────────────────────────────
 cache_dir="${HOME}/.cache/rbwzf"
@@ -19,9 +47,9 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
   PATH="${HOME}/.cargo/bin:${PATH}"
 fi
 
-# ─< ANSI color codes >───────────────────────────────────────────────────────────────────
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# # ─< ANSI color codes >───────────────────────────────────────────────────────────────────
+# RED='\033[0;31m'
+# NC='\033[0m' # No Color
 
 # ──────────────────────────────── <setup traps >──────────────────────────────
 on-exit() {
@@ -81,8 +109,9 @@ check-dependencies() {
 
   # if array is not empty, then exit and inform the user
   if ((${#needs[@]} > 0)); then
-    printf "You do not have ${RED}%s${NC} installed on your system, please install before going on" "${needs[*]@Q}"
-    exit 69
+    # printf "You do not have ${RED}%s${NC} installed on your system, please install before going on" "${needs[*]@Q}"
+    # exit 69
+    err "You do not have ${ANSI[red]}${needs[*]@Q}${ANSI[nc]} installed on your system, please install before going on"
   fi
 
   # unlock vault if it's locked
@@ -180,7 +209,7 @@ fzf-cmd() {
     return
     ;;
   gum)
-    gum filter --fuzzy --fuzzy-sort --placeholder="Select a password entry.."
+    gum filter --fuzzy --fuzzy-sort
     ;;
   esac
 }

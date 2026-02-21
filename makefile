@@ -1,4 +1,4 @@
-all: ./install.sh ./qute-rbw ./qute-rbw-picker
+all: ./install.sh ./bin/
 	./install.sh
 
 skip: ./install.sh
