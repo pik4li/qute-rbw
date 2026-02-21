@@ -25,8 +25,7 @@ command-exists() {
 # export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 # echo "PID: $$" >>/tmp/qute-rbw-debug.log
 
-# picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-picker
-picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-new
+picker=${HOME}/.local/share/qutebrowser/userscripts/qute-rbw-picker
 
 # TODO: make a dynamic terminal var
 # # Fix right now is the awesome `wm-term` application, written by myself :)
