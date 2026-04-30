@@ -77,13 +77,13 @@ fzf-cmd() {
   # defines the fzf-cmd, since fzf on different version has different flags to
   # enable.. Also tries to use a pretty fzf scheme. Also uses sk if it's there and
   # the fzf_version could not get determined
-  local header cmd args
+  local header cmd args query
   header=$1
 
   case "$FZF_TOOL" in
   fzf)
     cmd=fzf
-    args=("--reverse" "--style=full:rounded" "--margin=12%" "--color=16" "--cycle" "--no-multi" "--header=$header")
+    args=("--reverse" "--ghost=type to filter.." "--style=full:rounded" "--margin=12%" "--color=16" "--cycle" "--no-multi" "--header=$header")
     ;;
   sk | skim)
     cmd=sk
@@ -95,8 +95,22 @@ fzf-cmd() {
     ;;
   esac
 
+  [[ "$header" =~ "Select a password entry" ]] && {
+    [[ -z "$QUTE_URL" ]] || {
+      args+=("--query=$(rbw:search "$QUTE_URL")")
+    }
+  }
+
   $cmd "${args[@]}"
   return
+}
+
+rbw:search() {
+  local rc="https://(.*.(de|com|uk|me))"
+
+  [[ "$1" =~ $rc ]] && {
+    rbw search "${BASH_REMATCH[1]}" | head -1
+  }
 }
 
 copy-cmd() {
